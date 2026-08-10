@@ -1,7 +1,7 @@
 import React from 'react';
 import { Utensils, Activity, Calendar, BarChart3, Settings, Wifi, WifiOff, Sparkles } from 'lucide-react';
 
-export default function Header({ activeTab, setActiveTab, onOpenSettings, isDemo, connectionOk, lastUpdate }) {
+export default function Header({ activeTab, setActiveTab, onOpenSettings, isDemo, connectionOk, lastUpdate, isStale }) {
   return (
     <header style={{
       borderBottom: '1px solid var(--border-card)',
@@ -106,6 +106,11 @@ export default function Header({ activeTab, setActiveTab, onOpenSettings, isDemo
             <div className="badge badge-warning" title="현재 시뮬레이션 모드로 작동 중입니다. 백엔드 연결 설정에서 변경 가능합니다.">
               <Sparkles size={13} />
               시뮬레이션 모드
+            </div>
+          ) : isStale ? (
+            <div className="badge badge-danger" title="ESP32 수집 데이터 시각이 2분 이상 경과되었습니다 (연결 끊김).">
+              <WifiOff size={13} />
+              센서 연결 끊김
             </div>
           ) : connectionOk ? (
             <div className="badge badge-success" title="백엔드 REST API와 정상 연결되었습니다.">

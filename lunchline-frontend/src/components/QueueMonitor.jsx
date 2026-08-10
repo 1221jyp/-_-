@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Clock, Flame, AlertCircle, RefreshCw, CheckCircle2, TrendingUp, Sparkles, UserCheck } from 'lucide-react';
+import { Users, Clock, Flame, AlertCircle, RefreshCw, CheckCircle2, TrendingUp, Sparkles, UserCheck, Utensils, WifiOff } from 'lucide-react';
 
 export default function QueueMonitor({ statusData, onRefresh, todayMenu }) {
   if (!statusData) {
@@ -11,7 +11,8 @@ export default function QueueMonitor({ statusData, onRefresh, todayMenu }) {
     );
   }
 
-  const { currentCount, estimatedWaitMinutes, servingRatePerMin, congestionLevel, timestamp, counterStatuses } = statusData;
+  const { currentCount, estimatedWaitMinutes, servingRatePerMin, congestionLevel, timestamp, counterStatuses, isStale, staleMinutes } = statusData;
+
 
   // Congestion Level Helpers
   const getCongestionMeta = (level) => {
@@ -65,6 +66,32 @@ export default function QueueMonitor({ statusData, onRefresh, todayMenu }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
+      {/* ESP32 Camera Disconnected / Stale Data Alert Banner */}
+      {isStale && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(185, 28, 28, 0.15) 100%)',
+          border: '1px solid rgba(239, 68, 68, 0.6)',
+          borderRadius: 'var(--radius-md)',
+          padding: '16px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '14px',
+          color: '#fca5a5'
+        }}>
+          <WifiOff size={28} color="#ef4444" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              ⚠️ ESP32 센서 연결 끊김 경고
+              <span className="badge badge-danger">연결 끊김 / Stale Data</span>
+            </div>
+            <p style={{ fontSize: '0.85rem', marginTop: '4px', color: '#fca5a5', lineHeight: 1.4 }}>
+              마지막으로 대기 인원 정보가 수집된 시각({formattedTime})으로부터 <strong>{staleMinutes > 0 ? `${staleMinutes}분 이상` : '일정 시간'}</strong>이 지났습니다.
+              ESP32 카메라 수집 장치 또는 백엔드 연결 상태를 확인해주세요.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner: Today's Menu Highlight & Queue Alert */}
       {todayMenu && (
         <div className="glass-card" style={{

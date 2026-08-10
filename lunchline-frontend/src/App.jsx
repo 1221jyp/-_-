@@ -4,18 +4,27 @@ import QueueMonitor from './components/QueueMonitor';
 import MenuCalendar from './components/MenuCalendar';
 import PopularityAnalytics from './components/PopularityAnalytics';
 import ApiConfigModal from './components/ApiConfigModal';
-import { fetchQueueStatus, getWeeklyMenu, saveWeeklyMenu, getConfig } from './services/api';
+import { fetchQueueStatus, fetchWeeklyMenu, saveWeeklyMenuApi, getWeeklyMenu, getConfig } from './services/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'menu' | 'analytics'
   const [statusData, setStatusData] = useState(null);
   const [connectionOk, setConnectionOk] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [isDemo, setIsDemo] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
 
   // Weekly Menu state
   const [weeklyMenu, setWeeklyMenu] = useState(() => getWeeklyMenu());
+
+  // Fetch weekly menu from backend on mount & modal close
+  useEffect(() => {
+    fetchWeeklyMenu().then(menus => {
+      if (menus && menus.length > 0) {
+        setWeeklyMenu(menus);
+      }
+    });
+  }, [showConfigModal]);
 
   // Polling data fetcher
   const loadQueueStatus = useCallback(async () => {
@@ -49,9 +58,9 @@ export default function App() {
   }, [loadQueueStatus, showConfigModal]);
 
   // Handle Menu Updates
-  const handleUpdateMenu = (newMenuList) => {
+  const handleUpdateMenu = async (newMenuList) => {
     setWeeklyMenu(newMenuList);
-    saveWeeklyMenu(newMenuList);
+    await saveWeeklyMenuApi(newMenuList);
   };
 
   const todayMenu = weeklyMenu.find(m => m.dayName.includes('오늘')) || weeklyMenu[3];
@@ -67,6 +76,7 @@ export default function App() {
         isDemo={isDemo}
         connectionOk={connectionOk}
         lastUpdate={statusData?.timestamp}
+        isStale={statusData?.isStale}
       />
 
       {/* Main Content Area */}

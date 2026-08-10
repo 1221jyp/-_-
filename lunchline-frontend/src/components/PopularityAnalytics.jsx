@@ -1,27 +1,49 @@
-import React, { useState } from 'react';
-import { BarChart3, Trophy, Flame, Clock, Star, TrendingUp, Filter, Sparkles, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart3, Trophy, Flame, Clock, Star, TrendingUp, Filter, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts';
-import { POPULARITY_ANALYTICS_DATA } from '../services/api';
+import { fetchPopularityAnalytics, POPULARITY_ANALYTICS_DATA } from '../services/api';
 
 export default function PopularityAnalytics() {
   const [selectedCategory, setSelectedCategory] = useState('전체');
   const [sortBy, setSortBy] = useState('avgWaitPeople'); // avgWaitPeople | satisfactionScore | maxWaitMinutes
+  const [analyticsData, setAnalyticsData] = useState(POPULARITY_ANALYTICS_DATA);
+  const [loading, setLoading] = useState(true);
 
-  const data = POPULARITY_ANALYTICS_DATA;
+  useEffect(() => {
+    let mounted = true;
+    fetchPopularityAnalytics().then((res) => {
+      if (mounted && res) {
+        setAnalyticsData(res);
+        setLoading(false);
+      }
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  const data = analyticsData;
 
   // Filter & Sort rankings
-  const filteredRankings = data.popularRankings
+  const filteredRankings = (data.popularRankings || [])
     .filter(item => selectedCategory === '전체' || item.category === selectedCategory)
     .sort((a, b) => b[sortBy] - a[sortBy]);
 
   // Chart data formatting
-  const chartData = data.popularRankings.map(item => ({
+  const chartData = (data.popularRankings || []).map(item => ({
     name: item.menuName.split(' ')[0], // Short title for x-axis
     fullName: item.menuName,
     대기인원: item.avgWaitPeople,
     대기시간: item.maxWaitMinutes,
     만족도: item.satisfactionScore * 20
   }));
+
+  if (loading && !data) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+        <RefreshCw className="animate-spin" size={32} style={{ marginBottom: '12px' }} />
+        <p>백엔드 인기 메뉴 분석 데이터를 불러오는 중입니다...</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

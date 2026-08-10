@@ -7,11 +7,11 @@ const API_URL_KEY = 'lunch_line_backend_url';
 const POLLING_INTERVAL_KEY = 'lunch_line_polling_interval';
 const DEMO_MODE_KEY = 'lunch_line_demo_mode';
 
-// 기본 설정값
+// 기본 설정값 (실제 백엔드 연결 & 데모 모드 끎)
 export const DEFAULT_CONFIG = {
-  backendUrl: 'http://localhost:8080/api/queue/status',
+  backendUrl: 'http://localhost:3000/api/queue/status',
   pollingInterval: 3, // 초 단위
-  demoMode: true // 초기 실행 시 풍부한 기능 체험을 위해 데모 모드 켜짐
+  demoMode: false // 실제 백엔드 연동 모드
 };
 
 export const getConfig = () => {
@@ -30,9 +30,18 @@ export const saveConfig = (config) => {
   localStorage.setItem(DEMO_MODE_KEY, config.demoMode.toString());
 };
 
+export const getApiBaseUrl = () => {
+  const config = getConfig();
+  try {
+    const url = new URL(config.backendUrl);
+    return `${url.protocol}//${url.host}`;
+  } catch (e) {
+    return 'http://localhost:3000';
+  }
+};
+
 // 가상 대기줄 변동 시뮬레이션 상태
 let simCount = 38;
-let simTrend = 1; // 1: 증가, -1: 감소
 
 /**
  * 대기줄 상태 Fetch (백엔드 GET 요청 또는 시뮬레이션)
@@ -63,10 +72,8 @@ export const fetchQueueStatus = async () => {
         servingRatePerMin,
         congestionLevel,
         timestamp: new Date().toISOString(),
-        counterStatuses: [
-          { id: 1, name: '1번 배식구 (일반식)', isOperating: true, waitCount: Math.round(simCount * 0.55) },
-          { id: 2, name: '2번 배식구 (면/일품)', isOperating: true, waitCount: Math.round(simCount * 0.45) }
-        ]
+        isStale: false,
+        staleMinutes: 0
       }
     };
   }
@@ -106,6 +113,14 @@ export const fetchQueueStatus = async () => {
       else congestionLevel = 'LIGHT';
     }
 
+    const timestamp = resData.timestamp || new Date().toISOString();
+    const timestampMs = new Date(timestamp).getTime();
+    const diffMs = Date.now() - timestampMs;
+    // 2분(120초) 이상 데이터 수집이 지연된 경우 stale (연결 끊김) 처리
+    const STALE_THRESHOLD_MS = 2 * 60 * 1000;
+    const isStale = Number.isFinite(timestampMs) && diffMs > STALE_THRESHOLD_MS;
+    const staleMinutes = isStale ? Math.floor(diffMs / 60000) : 0;
+
     return {
       success: true,
       isDemo: false,
@@ -114,11 +129,10 @@ export const fetchQueueStatus = async () => {
         estimatedWaitMinutes,
         servingRatePerMin: servingRate,
         congestionLevel,
-        timestamp: resData.timestamp || new Date().toISOString(),
-        counterStatuses: resData.counterStatuses || [
-          { id: 1, name: '1번 배식구', isOperating: true, waitCount: Math.round(currentCount * 0.5) },
-          { id: 2, name: '2번 배식구', isOperating: true, waitCount: Math.round(currentCount * 0.5) }
-        ]
+        timestamp,
+        isStale,
+        staleMinutes,
+        counterStatuses: resData.counterStatuses || null
       }
     };
   } catch (err) {
@@ -131,14 +145,16 @@ export const fetchQueueStatus = async () => {
         estimatedWaitMinutes: 0,
         servingRatePerMin: 3.5,
         congestionLevel: 'LIGHT',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        isStale: true,
+        staleMinutes: 0
       }
     };
   }
 };
 
 /**
- * 주간 급식표 샘플 데이터 및 로컬 스토리지 연동
+ * 주간 급식표 데이터 및 백엔드 API 연동
  */
 const MENU_STORAGE_KEY = 'lunch_line_weekly_menu';
 
@@ -190,6 +206,48 @@ export const INITIAL_WEEKLY_MENU = [
   }
 ];
 
+export const fetchWeeklyMenu = async () => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const response = await fetch(`${baseUrl}/api/menu`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const json = await response.json();
+      const menus = json.data || json;
+      if (Array.isArray(menus) && menus.length > 0) {
+        localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify(menus));
+        return menus;
+      }
+    }
+  } catch (e) {
+    console.warn('백엔드 급식 메뉴 GET 실패, 로컬 캐시/기본값 사용:', e);
+  }
+  return getWeeklyMenu();
+};
+
+export const saveWeeklyMenuApi = async (menus) => {
+  localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify(menus));
+  const baseUrl = getApiBaseUrl();
+  try {
+    await fetch(`${baseUrl}/api/menu`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(menus)
+    });
+  } catch (e) {
+    console.warn('백엔드 급식 메뉴 PUT 실패 (로컬 스토리지에 저장됨):', e);
+  }
+};
+
 export const getWeeklyMenu = () => {
   const stored = localStorage.getItem(MENU_STORAGE_KEY);
   if (stored) {
@@ -203,18 +261,15 @@ export const getWeeklyMenu = () => {
 };
 
 export const saveWeeklyMenu = (menus) => {
-  localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify(menus));
+  saveWeeklyMenuApi(menus);
 };
 
 /**
- * 대기줄 측정 기간 동안의 인기 메뉴 분석 데이터
- * (대기줄 측정 기록과 급식 메뉴를 매칭하여 산출된 빅데이터 통계)
+ * 인기 메뉴 분석 데이터 백엔드 API 연동
  */
 export const POPULARITY_ANALYTICS_DATA = {
   measuredPeriod: '2026.07.01 ~ 2026.08.06 (최근 30일 측정)',
-  totalDataPoints: 1240, // 총 수집된 대기줄 측정 횟수
-  
-  // 가장 대기줄이 길었던 인기 메뉴 TOP 랭킹
+  totalDataPoints: 1240,
   popularRankings: [
     {
       rank: 1,
@@ -283,21 +338,17 @@ export const POPULARITY_ANALYTICS_DATA = {
       color: '#6366f1'
     }
   ],
-
-  // 시간대별 대기줄 혼잡 추이 (평균 데이터)
   hourlyTrend: [
     { time: '11:40', avgPeople: 8, waitMin: 2 },
     { time: '11:50', avgPeople: 18, waitMin: 5 },
     { time: '12:00', avgPeople: 42, waitMin: 12 },
     { time: '12:10', avgPeople: 68, waitMin: 19 },
-    { time: '12:20', avgPeople: 82, waitMin: 23 }, // 피크
+    { time: '12:20', avgPeople: 82, waitMin: 23 },
     { time: '12:30', avgPeople: 71, waitMin: 20 },
     { time: '12:40', avgPeople: 45, waitMin: 13 },
     { time: '12:50', avgPeople: 22, waitMin: 6 },
     { time: '13:00', avgPeople: 9, waitMin: 3 }
   ],
-
-  // 요일별 평균 대기인원
   dayOfWeekAverage: [
     { day: '월', count: 62, topMenu: '왕돈까스' },
     { day: '화', count: 68, topMenu: '마라탕' },
@@ -306,3 +357,28 @@ export const POPULARITY_ANALYTICS_DATA = {
     { day: '금', count: 42, topMenu: '순두부찌개' }
   ]
 };
+
+export const fetchPopularityAnalytics = async () => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const response = await fetch(`${baseUrl}/api/analytics`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const json = await response.json();
+      if (json.data) return json.data;
+    }
+  } catch (e) {
+    console.warn('백엔드 분석 API GET 실패, 정적 폴백 데이터 사용:', e);
+  }
+  return POPULARITY_ANALYTICS_DATA;
+};
+

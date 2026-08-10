@@ -122,7 +122,7 @@ export default function ApiConfigModal({ onClose, onSave }) {
                 type="text"
                 value={backendUrl}
                 onChange={(e) => setBackendUrl(e.target.value)}
-                placeholder="http://your-server-ip:8080/api/queue/status"
+                placeholder="http://localhost:3000/api/queue/status"
                 style={{
                   flex: 1,
                   padding: '10px 14px',
