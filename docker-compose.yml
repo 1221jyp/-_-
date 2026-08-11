@@ -13,5 +13,13 @@ services:
       - "8080:80"
     restart: unless-stopped
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+
 volumes:
   backend-data:
