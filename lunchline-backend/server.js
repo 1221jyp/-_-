@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose(); // 1. SQLite(기억 장치) 불러오기
+const { DatabaseSync } = require('node:sqlite'); // 1. SQLite(기억 장치) 불러오기 (Node 내장 모듈)
 const multer = require('multer'); // 이미지 업로드를 처리하기 위한 라이브러리
 const aiModel = require('./lunchline-ai-v7'); // AI 모델 모듈 불러오기
 
@@ -20,20 +20,15 @@ app.use((req, res, next) => {
 
 // 2. 데이터베이스(수첩) 준비하기
 // lunchline.db 라는 파일이 생성되면서 여기에 모든 기록이 영구 저장됨!
-const db = new sqlite3.Database('./lunchline.db', (err) => {
-    if (err) {
-        console.error('DB 에러:', err.message);
-    } else {
-        console.log('데이터베이스 준비 완료! 🧠');
-        // 기록을 남길 표(테이블) 만들기
-        db.run(`CREATE TABLE IF NOT EXISTS queue_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            count INTEGER,
-            estimatedWaitMinutes INTEGER
-        )`);
-    }
-});
+const db = new DatabaseSync('./lunchline.db');
+console.log('데이터베이스 준비 완료! 🧠');
+// 기록을 남길 표(테이블) 만들기
+db.exec(`CREATE TABLE IF NOT EXISTS queue_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT,
+    count INTEGER,
+    estimatedWaitMinutes INTEGER
+)`);
 
 // [1] 카메라 서버가 사람 수를 보내는 곳 (데이터 저장)
 // 이제 카메라(ESP32-CAM)에서 'image' 필드로 사진을 보내면 AI 모델이 분석합니다.
@@ -66,17 +61,11 @@ app.post('/api/count', upload.single('image'), async (req, res) => {
         const waitTime = Math.round(newCount * 0.5);
 
         // DB에 기록 저장! (이제 서버가 꺼져도 안 날아감)
-        db.run(
-            `INSERT INTO queue_log (timestamp, count, estimatedWaitMinutes) VALUES (?, ?, ?)`,
-            [now, newCount, waitTime],
-            function(err) {
-                if (err) {
-                    return res.status(500).send({ message: 'DB 저장 실패' });
-                }
-                console.log(`[${now}] AI 분석/데이터: ${newCount}명 저장 완료! (대기 예상: ${waitTime}분)`);
-                res.send({ message: '저장 성공!', count: newCount });
-            }
-        );
+        db.prepare(
+            `INSERT INTO queue_log (timestamp, count, estimatedWaitMinutes) VALUES (?, ?, ?)`
+        ).run(now, newCount, waitTime);
+        console.log(`[${now}] AI 분석/데이터: ${newCount}명 저장 완료! (대기 예상: ${waitTime}분)`);
+        res.send({ message: '저장 성공!', count: newCount });
     } catch (error) {
         console.error('AI 분석 또는 처리 중 에러 발생:', error);
         return res.status(500).send({ message: '서버 내부 오류가 발생했습니다.' });
@@ -85,24 +74,24 @@ app.post('/api/count', upload.single('image'), async (req, res) => {
 
 // [2] 프론트엔드(화면)가 현재 상태를 물어보는 곳 (선생님 요청대로 주소 변경)
 app.get('/api/queue/status', (req, res) => {
-    // DB에서 가장 최근 기록 1개만 가져오기
-    db.get(`SELECT * FROM queue_log ORDER BY id DESC LIMIT 1`, (err, row) => {
-        if (err) {
-            return res.status(500).send({ message: 'DB 조회 실패' });
-        }
-        
+    try {
+        // DB에서 가장 최근 기록 1개만 가져오기
+        const row = db.prepare(`SELECT * FROM queue_log ORDER BY id DESC LIMIT 1`).get();
+
         if (!row) {
             // 아직 카메라가 보낸 기록이 하나도 없을 때
             return res.send({ currentCount: 0, estimatedWaitMinutes: 0, timestamp: null });
         }
 
-        // 프론트엔드가 원하는 형태로 맞춰서 보내주기
+        // 프론트엔드가 원하는 형태로 보내주기
         res.send({
             currentCount: row.count,
             estimatedWaitMinutes: row.estimatedWaitMinutes,
             timestamp: row.timestamp
         });
-    });
+    } catch (err) {
+        res.status(500).send({ message: 'DB 조회 실패' });
+    }
 });
 
 // 서버 켜기
