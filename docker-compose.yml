@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: ./lunchline-backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - backend-data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./lunchline-frontend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  backend-data:

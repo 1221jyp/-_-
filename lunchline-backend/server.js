@@ -1,4 +1,5 @@
 const express = require('express');
+const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite'); // 1. SQLite(기억 장치) 불러오기 (Node 내장 모듈)
 const multer = require('multer'); // 이미지 업로드를 처리하기 위한 라이브러리
 const aiModel = require('./lunchline-ai-v7'); // AI 모델 모듈 불러오기
@@ -19,8 +20,9 @@ app.use((req, res, next) => {
 });
 
 // 2. 데이터베이스(수첩) 준비하기
-// lunchline.db 라는 파일이 생성되면서 여기에 모든 기록이 영구 저장됨!
-const db = new DatabaseSync('./lunchline.db');
+// data/lunchline.db 라는 파일이 생성되면서 여기에 모든 기록이 영구 저장됨! (도커 볼륨 마운트 지점)
+fs.mkdirSync('./data', { recursive: true });
+const db = new DatabaseSync('./data/lunchline.db');
 console.log('데이터베이스 준비 완료! 🧠');
 // 기록을 남길 표(테이블) 만들기
 db.exec(`CREATE TABLE IF NOT EXISTS queue_log (

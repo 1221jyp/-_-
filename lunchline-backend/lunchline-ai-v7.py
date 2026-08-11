@@ -24,9 +24,9 @@ def main():
     image_path = sys.argv[1]
     
     try:
-        # 모델 경로 (사용자가 지정한 위치 그대로 사용)
-        model_path = r'C:\Users\SNOOPY 1517\Desktop\yolov8n-pose.pt'
-        
+        # Ultralytics 표준 사전학습 모델 (로컬에 없으면 최초 1회 자동 다운로드됨)
+        model_path = os.path.join(os.path.dirname(__file__), 'yolov8n-pose.pt')
+
         # 모델 로드
         model = YOLO(model_path)
         
