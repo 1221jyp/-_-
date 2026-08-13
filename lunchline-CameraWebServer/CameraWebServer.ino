@@ -112,6 +112,7 @@ void captureAndSendImage() {
   HTTPClient http;
   http.begin(client, serverUrl);
   http.addHeader("Content-Type", "image/jpeg");
+  http.addHeader("X-Token", "lunchline-secure-2024");
   http.setTimeout(5000);
 
   int httpResponseCode = http.POST(fb->buf, fb->len);
