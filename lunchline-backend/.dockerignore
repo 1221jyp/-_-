@@ -1,0 +1,6 @@
+node_modules
+lunchline.db
+data/
+*.pt
+*.log
+.git

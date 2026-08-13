@@ -9,7 +9,7 @@ const DEMO_MODE_KEY = 'lunch_line_demo_mode';
 
 // 기본 설정값 (실제 백엔드 연결 & 데모 모드 끎)
 export const DEFAULT_CONFIG = {
-  backendUrl: 'http://localhost:3000/api/queue/status',
+  backendUrl: 'https://api.onamhlunchline.live/api/queue/status',
   pollingInterval: 3, // 초 단위
   demoMode: false // 실제 백엔드 연동 모드
 };
